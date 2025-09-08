@@ -1,0 +1,53 @@
+{
+  "id": "system-info-task",
+  "snapshot": "os",
+  "instruction": "Using gedit text editor, create a text file containing basic system information (hostname, current date, and system uptime) and save it as 'system_info.txt'",
+  "source": "custom_task",
+  "trajectory": "trajectories/",
+  "config": [
+    {
+      "type": "execute",
+      "parameters": {
+        "command": [
+          "python",
+          "-c",
+          "import pyautogui; import time; pyautogui.click({SCREEN_WIDTH_HALF}, {SCREEN_HEIGHT_HALF}); time.sleep(0.5);"
+        ]
+      }
+    }
+  ],
+  "related_apps": [
+    "os"
+  ],
+  "evaluator": {
+    "postconfig": [
+      {
+        "type": "sleep",
+        "parameters": {
+          "seconds": 2
+        }
+      }
+    ],
+    "func": "check_include_exclude", 
+    "result": {
+      "type": "vm_command_line",
+      "command": "if [ -f ~/system_info.txt ]; then echo 'FILE_EXISTS'; cat ~/system_info.txt; else echo 'FILE_NOT_FOUND'; fi"
+    },
+    "expected": {
+      "type": "rule",
+      "rules": {
+        "include": [
+          "FILE_EXISTS",
+          "hostname",
+          "uptime"
+        ],
+        "exclude": [
+          "FILE_NOT_FOUND"
+        ]
+      }
+    }
+  },
+  "proxy": false,
+  "fixed_ip": false,
+  "possibility_of_env_change": "low"
+}
