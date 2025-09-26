@@ -176,6 +176,149 @@ def _ensure_expected_path(base_path, relative_parts, rearrange=False, search_pat
         print(f"❌ Structure check: Failed to move {selected} to {expected_path}: {exc}")
         return None
 
+def _normalize_run_name(name):
+    """Normalize run directory names to run_X format (no leading zeros)."""
+    import re
+    # Extract number from various formats: run_1, run_01, Run_1, Run_01, etc.
+    match = re.match(r'(?i)^run_?(\d+)$', name.strip())
+    if match:
+        num = int(match.group(1))  # This removes leading zeros
+        return f'run_{num}'
+    return name
+
+def _normalize_annotator_name(name):
+    """Normalize annotator directory names to annotator_X format (no leading zeros)."""
+    import re
+    # Extract number from various formats: annotator1, annotator_1, Annotator1, etc.
+    match = re.match(r'(?i)^annotator_?(\d+)$', name.strip())
+    if match:
+        num = int(match.group(1))  # This removes leading zeros
+        return f'annotator_{num}'
+    return name
+
+def _normalize_directory_names(base_path, rearrange=False):
+    """Normalize directory names in the given path."""
+    if not rearrange:
+        return
+    
+    base_path = Path(base_path)
+    if not base_path.exists():
+        return
+    
+    # Normalize run directories in claude folder
+    claude_dir = _locate_claude_folder(base_path)
+    if claude_dir:
+        # First, collect all directories and their normalized names
+        dirs_to_process = []
+        for child in claude_dir.iterdir():
+            if child.is_dir():
+                normalized_name = _normalize_run_name(child.name)
+                dirs_to_process.append((child, normalized_name))
+        
+        # Process directories, handling conflicts
+        for child, normalized_name in dirs_to_process:
+            if normalized_name != child.name:
+                target_path = claude_dir / normalized_name
+                if not target_path.exists():
+                    try:
+                        shutil.move(str(child), str(target_path))
+                        print(f"🔁 Name normalization: Renamed {child.name} to {normalized_name}")
+                    except Exception as exc:
+                        print(f"❌ Name normalization: Failed to rename {child.name}: {exc}")
+                else:
+                    # Target exists - check if it's the same directory (case-insensitive filesystem)
+                    try:
+                        # Check if they're the same directory by comparing inodes
+                        child_stat = child.stat()
+                        target_stat = target_path.stat()
+                        if child_stat.st_ino == target_stat.st_ino:
+                            # Same directory - try to rename to normalize the name
+                            try:
+                                # Create a temporary name to avoid conflict
+                                temp_name = f"{normalized_name}_temp_{child_stat.st_ino}"
+                                temp_path = child.parent / temp_name
+                                shutil.move(str(child), str(temp_path))
+                                shutil.move(str(temp_path), str(target_path))
+                                print(f"🔁 Name normalization: Renamed {child.name} to {normalized_name} (case-insensitive filesystem)")
+                            except Exception as exc:
+                                print(f"ℹ️ Name normalization: {child.name} and {normalized_name} are the same directory (case-insensitive filesystem)")
+                        else:
+                            # Different directories - merge contents or report conflict
+                            print(f"⚠️ Name normalization: Cannot rename {child.name} to {normalized_name} (target exists)")
+                            print(f"   Consider manually merging contents from {child} into {target_path}")
+                    except (OSError, FileNotFoundError):
+                        # Fallback to path comparison
+                        if child.resolve() == target_path.resolve():
+                            try:
+                                # Create a temporary name to avoid conflict
+                                temp_name = f"{normalized_name}_temp"
+                                temp_path = child.parent / temp_name
+                                shutil.move(str(child), str(temp_path))
+                                shutil.move(str(temp_path), str(target_path))
+                                print(f"🔁 Name normalization: Renamed {child.name} to {normalized_name} (case-insensitive filesystem)")
+                            except Exception as exc:
+                                print(f"ℹ️ Name normalization: {child.name} and {normalized_name} are the same directory (case-insensitive filesystem)")
+                        else:
+                            print(f"⚠️ Name normalization: Cannot rename {child.name} to {normalized_name} (target exists)")
+                            print(f"   Consider manually merging contents from {child} into {target_path}")
+    
+    # Normalize annotator directories
+    annot_root = _locate_annotator_root(base_path)
+    if annot_root:
+        # First, collect all directories and their normalized names
+        dirs_to_process = []
+        for child in annot_root.iterdir():
+            if child.is_dir():
+                normalized_name = _normalize_annotator_name(child.name)
+                dirs_to_process.append((child, normalized_name))
+        
+        # Process directories, handling conflicts
+        for child, normalized_name in dirs_to_process:
+            if normalized_name != child.name:
+                target_path = annot_root / normalized_name
+                if not target_path.exists():
+                    try:
+                        shutil.move(str(child), str(target_path))
+                        print(f"🔁 Name normalization: Renamed {child.name} to {normalized_name}")
+                    except Exception as exc:
+                        print(f"❌ Name normalization: Failed to rename {child.name}: {exc}")
+                else:
+                    # Target exists - check if it's the same directory (case-insensitive filesystem)
+                    try:
+                        # Check if they're the same directory by comparing inodes
+                        child_stat = child.stat()
+                        target_stat = target_path.stat()
+                        if child_stat.st_ino == target_stat.st_ino:
+                            # Same directory - try to rename to normalize the name
+                            try:
+                                # Create a temporary name to avoid conflict
+                                temp_name = f"{normalized_name}_temp_{child_stat.st_ino}"
+                                temp_path = child.parent / temp_name
+                                shutil.move(str(child), str(temp_path))
+                                shutil.move(str(temp_path), str(target_path))
+                                print(f"🔁 Name normalization: Renamed {child.name} to {normalized_name} (case-insensitive filesystem)")
+                            except Exception as exc:
+                                print(f"ℹ️ Name normalization: {child.name} and {normalized_name} are the same directory (case-insensitive filesystem)")
+                        else:
+                            # Different directories - merge contents or report conflict
+                            print(f"⚠️ Name normalization: Cannot rename {child.name} to {normalized_name} (target exists)")
+                            print(f"   Consider manually merging contents from {child} into {target_path}")
+                    except (OSError, FileNotFoundError):
+                        # Fallback to path comparison
+                        if child.resolve() == target_path.resolve():
+                            try:
+                                # Create a temporary name to avoid conflict
+                                temp_name = f"{normalized_name}_temp"
+                                temp_path = child.parent / temp_name
+                                shutil.move(str(child), str(temp_path))
+                                shutil.move(str(temp_path), str(target_path))
+                                print(f"🔁 Name normalization: Renamed {child.name} to {normalized_name} (case-insensitive filesystem)")
+                            except Exception as exc:
+                                print(f"ℹ️ Name normalization: {child.name} and {normalized_name} are the same directory (case-insensitive filesystem)")
+                        else:
+                            print(f"⚠️ Name normalization: Cannot rename {child.name} to {normalized_name} (target exists)")
+                            print(f"   Consider manually merging contents from {child} into {target_path}")
+
 def _has_run_dirs(path):
     try:
         return any(child.is_dir() and child.name.lower().startswith('run_') for child in Path(path).iterdir())
@@ -398,6 +541,10 @@ def validate_pass_k(task_folder, task_id, rearrange=False):
 def check_file_structure(task_folder, task_id, rearrange=False, task_data=None):
     base = Path(task_folder)
     all_good = True
+    
+    # Normalize directory names if rearrange is enabled
+    if rearrange:
+        _normalize_directory_names(base, rearrange)
     json_path = _ensure_expected_path(base, [f'{task_id}.json'], rearrange, search_patterns=[f'{task_id}.json'])
     if json_path is None or not json_path.exists():
         print(f'❌ Structure check: Required JSON {task_id}.json missing.')
@@ -803,6 +950,8 @@ def main(delivery_folder, task_id, selected_checks, rearrange):
             except Exception as exc:
                 print(f'❌ Error loading task JSON: {exc}')
                 return
+        # Normalize directory names first
+        _normalize_directory_names(task_folder, rearrange)
         check_file_structure(task_folder, task_id, rearrange, task_data)
     check_entries = [
         ('structure', lambda: check_file_structure(task_folder, task_id, rearrange, task_data)),
