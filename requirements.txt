@@ -65,3 +65,6 @@ loguru
 dotenv
 tldextract
 anthropic
+python-dotenv 
+langchain-google-genai
+langchain
