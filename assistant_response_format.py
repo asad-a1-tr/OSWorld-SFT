@@ -1,17 +1,17 @@
 import json
 import os
 import argparse
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.schema import HumanMessage, SystemMessage
 from dotenv import load_dotenv
 
-def restructure_notebook(file_path, openai_api_key):
+def restructure_notebook(file_path, google_api_key):
     """
     Restructures the assistant reasoning in a Jupyter notebook using an LLM.
 
     Args:
         file_path (str): The path to the .ipynb file.
-        openai_api_key (str): The OpenAI API key.
+        google_api_key (str): The Google API key.
     """
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -63,17 +63,17 @@ For each tool call, you must provide a detailed explanation that includes:
 3.  **How this action contributes to the overall goal of fulfilling the user's instruction.**
 4.  **A concluding sentence that summarizes the efficiency or benefit of this step.**
 
-Your response should be a numbered list of explanations, corresponding to the tool calls. Do not output any other text, just the numbered list. Each explanation should be a single, comprehensive paragraph.
+Your response should be a numbered list of explanations, corresponding to the tool calls. Do not output any other text, just the numbered list. Each explanation should be a single, comprehensive paragraph. Do not include the command itself in the explanation.
 
 Here is an example of the desired explanation style for a hypothetical action 'press the Windows key':
 
-"To initiate this workflow, I will press the Windows key (WinLeft) to open the system application menu. Accessing the application menu is the first step for launching the necessary applications—such as a file manager or code editor—that will be used to create and edit the notes.txt file in the specified code_workspace directory. This approach ensures I can efficiently navigate to the tools needed for file creation and content editing."
+"To initiate this workflow, I will press the Windows key to open the system application menu. Accessing the application menu is the first step for launching the necessary applications—such as a file manager or code editor—that will be used to create and edit the notes.txt file in the specified code_workspace directory. This approach ensures I can efficiently navigate to the tools needed for file creation and content editing."
 
 Now, generate the explanations for the provided tool calls.
 """
 
     try:
-        llm = ChatOpenAI(api_key=openai_api_key)
+        llm = ChatGoogleGenerativeAI(model="gemini-pro-latest", google_api_key=google_api_key)
         messages = [
             SystemMessage(content="You are a helpful assistant that provides clear and concise explanations for automation tasks."),
             HumanMessage(content=prompt)
@@ -81,7 +81,7 @@ Now, generate the explanations for the provided tool calls.
         response = llm.invoke(messages)
         new_reasoning = response.content.strip().split('\n')
     except Exception as e:
-        print(f"Error calling OpenAI API: {e}")
+        print(f"Error calling Google API: {e}")
         return
 
     # Filter out empty strings from the split
@@ -115,19 +115,19 @@ def main():
 
     load_dotenv()
 
-    openai_api_key = os.environ.get("OPENAI_API_KEY")
-    if not openai_api_key:
-        print("Error: OPENAI_API_KEY environment variable not set.")
+    google_api_key = os.environ.get("GOOGLE_API_KEY")
+    if not google_api_key:
+        print("Error: GOOGLE_API_KEY environment variable not set.")
         return
 
     if os.path.isfile(args.path) and args.path.endswith('.ipynb'):
-        restructure_notebook(args.path, openai_api_key)
+        restructure_notebook(args.path, google_api_key)
     elif os.path.isdir(args.path):
         for root, _, files in os.walk(args.path):
             for file in files:
                 if file.endswith('.ipynb'):
                     file_path = os.path.join(root, file)
-                    restructure_notebook(file_path, openai_api_key)
+                    restructure_notebook(file_path, google_api_key)
     else:
         print(f"Error: Invalid path {args.path}. Please provide a valid .ipynb file or directory.")
 

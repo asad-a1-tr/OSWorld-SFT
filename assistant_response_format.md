@@ -22,7 +22,7 @@ Before running the script, ensure you have the following set up:
 
 3.  **OpenAI API Key:** Create a file named `.env` in the root of the project directory and add your OpenAI API key to it, like this:
     ```
-    OPENAI_API_KEY='your_api_key_here'
+    GOOGLE_API_KEY='your_api_key_here'
     ```
     The script will automatically load this key.
 
