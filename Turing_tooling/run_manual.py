@@ -34,12 +34,12 @@ def config() -> argparse.Namespace:
     parser.add_argument(
         "--action_space", type=str, default="pyautogui", help="Action type, defaults to pyautogui"
     )
-    parser.add_argument(
-        "--observation_type",
-        choices=["screenshot", "a11y_tree", "screenshot_a11y_tree", "som"],
-        default="screenshot",
-        help="Observation type",
-    )
+    # parser.add_argument(
+    #     "--observation_type",
+    #     choices=["screenshot", "a11y_tree", "screenshot_a11y_tree", "som"],
+    #     default="screenshot",
+    #     help="Observation type",
+    # )
     parser.add_argument("--sleep_after_execution", type=float, default=1.0, help="Time to sleep after each action")
     parser.add_argument("--max_steps", type=int, default=150, help="Maximum number of steps per task")
 
@@ -109,7 +109,7 @@ def main():
         headless=args.headless,
         screen_size=(args.screen_width, args.screen_height),
         client_password=args.client_password,
-        require_a11y_tree=args.observation_type in ["a11y_tree", "screenshot_a11y_tree", "som"],
+        require_a11y_tree=False,
     )
 
     # Load tasks
