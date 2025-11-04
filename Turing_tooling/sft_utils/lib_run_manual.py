@@ -15,15 +15,12 @@ logger = logging.getLogger("desktopenv.manual_run.lib")
 
 
 def _wait_for_observation(env: DesktopEnv, timeout: float = 60.0, poll_interval: float = 5.0):
-    """Poll until screenshot (and tree if required) is available."""
+    """Poll until screenshot is available."""
     deadline = time.time() + timeout
     obs = None
-    requires_tree = getattr(env, "require_a11y_tree", False)
     while time.time() < deadline:
         obs = env._get_obs()
-        has_screenshot = bool(obs.get("screenshot"))
-        has_tree = not requires_tree or bool(obs.get("accessibility_tree"))
-        if has_screenshot and has_tree:
+        if obs and obs.get("screenshot"):
             return obs
         time.sleep(poll_interval)
     return obs
@@ -49,37 +46,20 @@ def run_single_example_manual(
     recording_path = os.path.join(result_dir, "recording.mp4")
     env.controller.start_recording()
     
-    # Wait for accessibility service to be ready
+    # Wait for vm to be ready
     print("Initializing VM and services...")
-    time.sleep(10)  # Give VM time to fully start up
-    
-    # Test accessibility service with debug checks
-    print("Testing accessibility service...")
-    # Check if AT-SPI is installed and running
-    env.controller.execute_python_command("import subprocess; result = subprocess.run(['ps', 'aux'], capture_output=True, text=True); print('AT-SPI Processes:', [line for line in result.stdout.split('\\n') if 'at-spi' in line])")
-    time.sleep(1)
-    # Try to get accessibility tree
-    result = env.controller.get_accessibility_tree()
-    if result:
-        print("Successfully got accessibility tree!")
-        print(f"Tree size: {len(result)} characters")
-        print("First 200 characters of tree:", result[:200])
-    else:
-        print("Warning: Could not get accessibility tree. Trying to fix...")
-        print("Attempting to start AT-SPI if not running...")
-        # Try to start AT-SPI services
-        env.controller.execute_python_command("subprocess.run(['systemctl', '--user', 'start', 'at-spi-dbus-bus.service'])")
-        env.controller.execute_python_command("pyautogui.press('win')")
-        time.sleep(2)
-        print("Retrying accessibility tree capture...")
-        result = env.controller.get_accessibility_tree()
-        if not result:
-            print("Error: Could not initialize accessibility service.")
-            print("Checking AT-SPI status:")
-            env.controller.execute_python_command("subprocess.run(['systemctl', '--user', 'status', 'at-spi-dbus-bus.service'])")
-            time.sleep(2)
+    time.sleep(10)
     
     trajectory = []
+    
+    # Save initial screenshot as step_0.png
+    initial_screenshot_path = os.path.join(result_dir, "step_0.png")
+    if "screenshot" in obs and isinstance(obs["screenshot"], bytes):
+        try:
+            screenshot_img = Image.open(io.BytesIO(obs["screenshot"]))
+            screenshot_img.save(initial_screenshot_path)
+        except Exception as e:
+            logger.error(f"Failed to save initial screenshot: {e}")
     
     print("\n" + "="*50)
     print(f"Instruction: {instruction}")
@@ -89,39 +69,6 @@ def run_single_example_manual(
     print("Mouse coordinates are based on a 1920x1080 screen resolution.")
 
     for step in range(max_steps):
-        # Save all available observations before the action
-        observation_log = {}
-        if "screenshot" in obs and isinstance(obs["screenshot"], bytes):
-            try:
-                screenshot_img = Image.open(io.BytesIO(obs["screenshot"]))
-                screenshot_path = os.path.join(result_dir, f"step_{step}_before.png")
-                screenshot_img.save(screenshot_path)
-                observation_log["screenshot"] = screenshot_path
-            except Exception as e:
-                logger.error(f"Failed to save screenshot: {e}")
-
-        if "accessibility_tree" in obs and obs["accessibility_tree"]:
-            a11y_path = os.path.join(result_dir, f"step_{step}_before.xml")
-            with open(a11y_path, "w", encoding="utf-8") as f:
-                f.write(obs["accessibility_tree"])
-            observation_log["a11y_tree"] = a11y_path
-            print(f"  -> Saved accessibility tree to {a11y_path}")
-
-        if "som" in obs and isinstance(obs["som"], bytes):
-            try:
-                som_img = Image.open(io.BytesIO(obs["som"]))
-                som_path = os.path.join(result_dir, f"step_{step}_before_som.png")
-                som_img.save(som_path)
-                observation_log["som"] = som_path
-            except Exception as e:
-                logger.error(f"Failed to save SoM image: {e}")
-
-        step_log = {
-            "step": step,
-            "observation": observation_log,
-            "instruction": instruction
-        }
-
         # Get manual action
         try:
             manual_action = input(f"\nStep {step + 1}/{max_steps} | Enter action (e.g., pg.click(100, 200)): ")
@@ -136,32 +83,48 @@ def run_single_example_manual(
             print("Task marked as done.")
             break
 
+        # Save all available observations before the action
+        step_log = {
+            "step": step,
+            "observation": {},
+            "instruction": instruction
+        }
+        
+        # Take a pre-action screenshot
+        obs = _wait_for_observation(env)
+        if "screenshot" in obs and isinstance(obs["screenshot"], bytes):
+            try:
+                screenshot_img = Image.open(io.BytesIO(obs["screenshot"]))
+                screenshot_path = os.path.join(result_dir, f"step_{step+1}_pre.png")
+                screenshot_img.save(screenshot_path)
+                step_log["observation"]["screenshot_before"] = os.path.basename(screenshot_path)
+            except Exception as e:
+                logger.error(f"Failed to save screenshot: {e}")
+
         # Execute action
         try:
             if manual_action.startswith("pg."):
-                # Convert pg.X to pyautogui.X
                 command = manual_action.replace("pg.", "pyautogui.")
-                print(f"  -> Converting to VM command: {command}")
             elif manual_action.startswith("time.") or manual_action.startswith("actions."):
-                # It's a Python command, use as is
                 command = manual_action
-                print(f"  -> Executing Python command: {command}")
             else:
-                # If it's not a Python command, assume it's a shell command
-                print(f"  -> Interpreted as shell command: {manual_action}")
                 command = f'pyautogui.typewrite("{manual_action}"); pyautogui.press("enter")'
 
-            # Send the command to the VM to execute
             result = env.controller.execute_python_command(command)
             if result and result.get("error"):
                 print(f"  -> Error from VM: {result['error']}")
             
-            # Get the new state
-            obs, reward, done, info = env.step(None)  # Pass None because action is already executed
-            if env.require_a11y_tree and not obs.get("accessibility_tree"):
-                refreshed = _wait_for_observation(env, timeout=30.0, poll_interval=5.0)
-                if refreshed:
-                    obs = refreshed
+            obs, reward, done, info = env.step(None)
+            
+            if "screenshot" in obs and isinstance(obs["screenshot"], bytes):
+                try:
+                    screenshot_img = Image.open(io.BytesIO(obs["screenshot"]))
+                    screenshot_path = os.path.join(result_dir, f"step_{step+1}_post.png")
+                    screenshot_img.save(screenshot_path)
+                    step_log["observation"]["screenshot_after"] = os.path.basename(screenshot_path)
+                except Exception as e:
+                    logger.error(f"Failed to save screenshot: {e}")
+
             step_log["action"] = manual_action
             step_log["info"] = info
             print(f"  -> Executed: {manual_action}")
@@ -174,7 +137,6 @@ def run_single_example_manual(
 
         trajectory.append(step_log)
         
-        # Optional sleep
         if args.sleep_after_execution > 0:
             time.sleep(args.sleep_after_execution)
 

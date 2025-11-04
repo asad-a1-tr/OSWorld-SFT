@@ -31,33 +31,9 @@ def generate_notebook_for_manual_task(
     # Create notebook structure
     notebook = {
         "cells": [],
-        "metadata": {
-            "kernelspec": {
-                "display_name": "Python 3",
-                "language": "python",
-                "name": "python3"
-            },
-            "language_info": {
-                "name": "python",
-                "version": "3.8.0"
-            }
-        },
         "nbformat": 4,
         "nbformat_minor": 4
     }
-    
-    # 1. Metadata cell
-    metadata_content = f"""**[metadata]**
-
-```json
-{json.dumps(task_config, indent=2)}
-```"""
-    
-    notebook["cells"].append({
-        "cell_type": "markdown",
-        "metadata": {},
-        "source": [metadata_content]
-    })
     
     # 2. User instruction cell
     user_content = f"""**[user]**
@@ -84,16 +60,7 @@ def generate_notebook_for_manual_task(
         if action.lower() in ["done", "exit"]:
             continue
         
-        # Assistant reasoning cell (placeholder)
-        assistant_content = f"""**[assistant]**
 
-Executing step {step_counter}: {action}. This action will be performed on the VM to complete part of the task."""
-        
-        notebook["cells"].append({
-            "cell_type": "markdown", 
-            "metadata": {},
-            "source": [assistant_content]
-        })
         
                 # Tool call cell
         # Convert action to proper format
@@ -106,7 +73,7 @@ Executing step {step_counter}: {action}. This action will be performed on the VM
         escaped_command = f"import pyautogui, time\n{command}"
         arguments_json = json.dumps(escaped_command)
 
-        tool_call_content = f"""**[tool_call]**
+        tool_call_content = f"""**[action]**
 
 ```json
 {{
@@ -123,24 +90,24 @@ Executing step {step_counter}: {action}. This action will be performed on the VM
         })
         
         # Tool output cell with attachments
-        screenshot_file = f"vm://screen/{step_num+1:04d}.png"
-        a11y_file = f"vm://a11y/{step_num+1:04d}.xml"
-        
-        tool_output_content = f"""**[tool_output]**
+        attachments = []
+        if "screenshot_before" in step_data["observation"]:
+            attachments.append({
+                "type": "screenshot",
+                "src": f"vm://{step_data['observation']['screenshot_before']}"
+            })
+        if "screenshot_after" in step_data["observation"]:
+            attachments.append({
+                "type": "screenshot",
+                "src": f"vm://{step_data['observation']['screenshot_after']}"
+            })
+
+        tool_output_content = f"""**[tool_output {step_counter}]**
 
 **Attachments:**
 
 ```json
-[
-  {{
-    "type": "screenshot",
-    "src": "{screenshot_file}"
-  }},
-  {{
-    "type": "a11y_tree", 
-    "src": "{a11y_file}"
-  }}
-]
+{json.dumps(attachments, indent=2)}
 ```"""
         
         notebook["cells"].append({
@@ -151,16 +118,7 @@ Executing step {step_counter}: {action}. This action will be performed on the VM
         
         step_counter += 1
     
-    # Final assistant cell
-    final_assistant_content = """**[assistant]**
 
-DONE"""
-    
-    notebook["cells"].append({
-        "cell_type": "markdown",
-        "metadata": {},
-        "source": [final_assistant_content]
-    })
     
     # Save notebook
     notebook_path = os.path.join(result_dir, f"{task_id}.ipynb")
