@@ -31,6 +31,11 @@ def generate_notebook_for_manual_task(
     # Create notebook structure
     notebook = {
         "cells": [],
+        "metadata": {
+            "language_info": {
+                "name": "python"
+            }
+        },
         "nbformat": 4,
         "nbformat_minor": 4
     }
@@ -54,71 +59,45 @@ def generate_notebook_for_manual_task(
             continue
             
         action = step_data["action"]
-        step_num = step_data.get("step", step_counter - 1)
         
         # Skip non-action steps
         if action.lower() in ["done", "exit"]:
             continue
-        
 
-        
-                # Tool call cell
-        # Convert action to proper format
+        # Pre-action screenshot cell
+        if "screenshot_before" in step_data["observation"]:
+            screenshot_before_path = step_data['observation']['screenshot_before']
+            pre_screenshot_content = f"**[Step {step_counter} pre]**\n\n![step_{step_counter}_pre](./{screenshot_before_path})"
+            notebook["cells"].append({
+                "cell_type": "markdown",
+                "metadata": {},
+                "source": [pre_screenshot_content]
+            })
+
+        # Action cell
         if action.startswith("pg."):
             command = action.replace("pg.", "pyautogui.")
         else:
             command = action
-
-        # Safely escape arguments using json.dumps
-        escaped_command = f"import pyautogui, time\n{command}"
-        arguments_json = json.dumps(escaped_command)
-
-        tool_call_content = f"""**[action]**
-
-```json
-{{
-  "tool_name": "pyautogui",
-  "arguments": {arguments_json}
-}}
-```"""
-
         
+        tool_call_content = f"**[action]**\n\n```json\n{command}\n```"
         notebook["cells"].append({
             "cell_type": "markdown",
             "metadata": {},
             "source": [tool_call_content]
         })
         
-        # Tool output cell with attachments
-        attachments = []
-        if "screenshot_before" in step_data["observation"]:
-            attachments.append({
-                "type": "screenshot",
-                "src": f"vm://{step_data['observation']['screenshot_before']}"
-            })
+        # Post-action screenshot cell
         if "screenshot_after" in step_data["observation"]:
-            attachments.append({
-                "type": "screenshot",
-                "src": f"vm://{step_data['observation']['screenshot_after']}"
+            screenshot_after_path = step_data['observation']['screenshot_after']
+            post_screenshot_content = f"**[Step {step_counter} post]**\n\n![step_{step_counter}_post](./{screenshot_after_path})"
+            notebook["cells"].append({
+                "cell_type": "markdown",
+                "metadata": {},
+                "source": [post_screenshot_content]
             })
-
-        tool_output_content = f"""**[tool_output {step_counter}]**
-
-**Attachments:**
-
-```json
-{json.dumps(attachments, indent=2)}
-```"""
-        
-        notebook["cells"].append({
-            "cell_type": "markdown",
-            "metadata": {},
-            "source": [tool_output_content]
-        })
         
         step_counter += 1
-    
-
     
     # Save notebook
     notebook_path = os.path.join(result_dir, f"{task_id}.ipynb")
